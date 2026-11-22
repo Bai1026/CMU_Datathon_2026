@@ -15,11 +15,16 @@ _Care you can find, evidence you can check_
 
 <!-- TODO: replace the Video link with the demo video URL -->
 
-Given a service and a location in India, return the best facility options from the Virtue
-Foundation dataset, with the exact record entries each recommendation rests on.
+Someone in India needs dialysis, an emergency C-section or a NICU bed, and has to decide where to go.
+CareProof takes a service and a location, returns the best facility options from the Virtue Foundation
+dataset, and shows the exact record entries each recommendation rests on. When the records cannot
+support an answer, it says so.
 
 `score = evidence x trust x proximity`
 
+- [The problem](#the-problem)
+- [The data](#the-data)
+- [What CareProof delivers](#what-careproof-delivers)
 - [How it works](#how-it-works)
 - [What the data can and cannot tell](#what-the-data-can-and-cannot-tell)
 - [Run on Databricks](#run-on-databricks)
@@ -33,9 +38,103 @@ Foundation dataset, with the exact record entries each recommendation rests on.
 - [Test](#test)
 - [Not yet done, and limits](#not-yet-done-and-limits)
 
+## The problem
+
+Going to a facility that turns out not to offer the service costs travel time, and in an emergency the
+patient may not have it. The person deciding may be neither a clinician nor a data analyst.
+
+The only source is a directory of about 10,000 facilities, compiled from web pages and listings. Nothing
+in it is verified. Every field is what a facility, or a page about it, says. A search tool that repeats
+those claims with confidence gives wrong answers that look right.
+
+The challenge asks for five things:
+
+| Requirement                                        | How CareProof meets it                                                                    |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Given a service and a location, return the best facility options | Ranked options, scored by evidence, trust and proximity                     |
+| Cite the facility's own text for every claim, score and ranking  | Each line is quoted word for word, with the field and entry it was copied from |
+| Communicate uncertainty                            | Three grades in words, a visible trust score, and "cannot tell" as a result of its own    |
+| Support a non-technical workflow                   | A web app with eight service tiles and a free-text question box, in English and Hindi     |
+| Run on Databricks Free Edition with the given data | One serverless notebook, no cluster, no external API key                                  |
+
+## The data
+
+The dataset cannot be used as it comes. Three things are wrong with it, and each one changes the design.
+
+**1. The records are claims, and many are weak.** Counts are from the full run on 10,088 rows.
+
+| What we found                                                    | Records         | What CareProof does                                              |
+| ---------------------------------------------------------------- | --------------- | ---------------------------------------------------------------- |
+| Exact duplicate rows                                             | 11              | Removed, leaving 10,077 facilities                               |
+| No first-party source (the facility's own site or page)          | 5,349 (53.1%)   | Trust reduced by 0.10                                            |
+| Coordinates disagree with the PIN code                           | 1,040 (10.3%)   | Trust reduced by 0.15, and the answer says so                    |
+| Probably several facilities merged into one (11 or more phones)  | 577 (5.7%)      | Trust reduced by 0.20, and the answer says so                    |
+
+Two smaller checks work the same way: coordinates outside India (0.10) and columns shifted out of place
+(0.20). Trust starts at 1.0 and never goes below 0.30.
+
+**2. There is no "offers this service" column.** What a facility does is spread across five fields:
+three free-text lists (`procedure`, `capability`, `equipment`), the sentences of `description`, and the
+`specialties` codes. CareProof reads all five for each of eight services and grades what it finds:
+
+| Grade        | Meaning                                                                 | Weight |
+| ------------ | ----------------------------------------------------------------------- | ------ |
+| Corroborated | The record states the service, and a separate entry backs it up         | 1.0    |
+| Claimed      | The record states the service, and nothing backs it up                  | 0.6    |
+| Implied      | Only a related detail, not enough to confirm                            | 0.25   |
+
+This produced 25,768 graded facility and service pairs, resting on 74,883 quoted entries. Every quote
+keeps its field and entry number, so a reader can find it in the record.
+
+**3. The coverage is uneven.** 88% of the records are private facilities and about 5% are public, so
+rural public hospitals are often missing. In most of the country a missing listing says more about the
+dataset than about care. This is why the district view has a class of its own for "Too few listings to
+tell".
+
+Two more sources had to be cleaned before they could be joined:
+
+- **India Post PIN directory.** 395 PIN areas had coordinates far from their own district and were
+  dropped, leaving 19,155. Place names also arrive in old spellings, abbreviations and nine Indian
+  scripts, so the place lookup has its own alias list and reading rules (see [Languages](#languages)).
+- **NFHS-5 district survey.** District names differ from the directory's (renamed and split districts).
+  A dedicated matcher joins 695 of 706. Values the survey suppressed are treated as missing, and values
+  it marks as based on few cases are kept and counted.
+
+## What CareProof delivers
+
+The goal is an answer that a non-expert can act on and check, and a clear statement of where the data
+cannot give one.
+
+**For one question.** A short list of facilities, each answering three things: do they offer it, is the
+information reliable, how far is it.
+
+- The grade comes in words before any number.
+- Every supporting line is a quote from the record, with its field and entry number.
+- Problems with the record are shown on the card, not hidden in the score.
+- Travel time is a range, compared with a target time for the service where one is set.
+- If nothing nearby is corroborated, the headline says so.
+- The question can be typed in any language. In our own test sets, 13 of 13 questions and 20 of 20
+  non-English place names were read correctly.
+
+**For the whole country.** Each of 751 districts is put in one of four classes for each of eight
+services. For the four services with a matching NFHS-5 indicator, districts are also ranked by
+`need x gap`. For emergency C-section that gives four lists and four actions:
+
+| Class                     | Districts | Action                                                       |
+| ------------------------- | --------- | ------------------------------------------------------------ |
+| Corroborated within reach | 85        | Lowest priority                                              |
+| Claimed within reach      | 57        | Verify the claim. A phone call is the cheapest new capacity. |
+| No listing within reach   | 99        | Check on the ground, starting where need is highest          |
+| Too few listings to tell  | 510       | Count facilities first, before any ranking                   |
+
+**What it does not claim.** The grades have not been validated by hand, travel time is an estimate, and
+distance to a listed facility mostly follows development: once literacy, clean fuel and electricity are
+held constant, its relation to survey outcomes cannot be told from zero. See
+[Not yet done, and limits](#not-yet-done-and-limits).
+
 ## How it works
 
-![Care Finder: how an answer is produced](doc/care_finder_flow_detailed.png)
+![CareProof: how an answer is produced](doc/care_finder_flow_detailed.png)
 
 **Figure 1. How an answer is produced.** Three stages share one saved state. Blue boxes are the nine
 design decisions, in the order the data meets them. The dashed box is the only place a language model

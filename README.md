@@ -7,7 +7,7 @@
 _Care you can find, evidence you can check_
 
 [![App](https://img.shields.io/badge/App-Databricks-1B3139?style=for-the-badge&logo=databricks&logoColor=FF3621)](https://datathon-2026-7474652223537473.aws.databricksapps.com/)
-[![Video](https://img.shields.io/badge/Video-YouTube-B84A45?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/)
+[![Video](https://img.shields.io/badge/Video-YouTube-B84A45?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/A1XgduBgVtY)
 
 **Team member**: [Vincent Pai](https://github.com/Bai1026) & [Daphne Yang](https://github.com/Daphne0127)
 

@@ -1,0 +1,7 @@
+flask
+pandas
+numpy
+pyarrow
+pyyaml
+jinja2
+databricks-sdk

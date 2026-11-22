@@ -1,0 +1,93 @@
+{# Care Finder answer. Rendered by carefinder.render_html() and render_message().
+   Styles are inline so the same HTML works in a notebook (displayHTML) and in an app.
+   Everything is auto-escaped: record text can never inject markup. #}
+{% macro card(c) %}
+<div style="border:1px solid #cfd6dd;border-radius:10px;padding:14px 16px;margin:10px 0;background:#fff;color:#16222c;font-family:system-ui,sans-serif;font-size:14px;line-height:1.5">
+  {% if c.heading %}<div style="font-size:12px;color:#667;text-transform:uppercase;letter-spacing:.06em">{{ c.heading }}</div>{% endif %}
+  <div style="font-size:17px;font-weight:600">{% if c.rank and not c.heading %}{{ c.rank }}. {% endif %}{{ c.name }}</div>
+  <div style="color:#445">{{ c.place }} &middot; {{ c.distance }}{% if c.travel %}, {{ c.travel }}{% endif %}{% if c.phone %} &middot; Phone {{ c.phone }}{% endif %}</div>
+  {% if c.time_text %}
+  <div style="margin-top:6px;padding:5px 10px;border-radius:6px;font-size:13px;background:{{ {'within': '#e0f3e7', 'uncertain': '#fbefd8', 'beyond': '#fbe8e6'}[c.time_status] }}">{{ c.time_text }}</div>
+  {% endif %}
+  <div style="margin-top:8px"><span style="background:{{ c.tier_color }};color:#fff;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:600">{{ c.tier_label }}</span>
+    <span style="color:#445"> {{ c.why }}</span></div>
+  <div style="margin-top:8px;font-variant-numeric:tabular-nums">Score <b>{{ c.score }}</b> = evidence {{ c.evidence_value }} &times; trust {{ c.trust }} &times; proximity {{ c.proximity }}</div>
+  <div style="margin-top:8px"><b>Evidence from the record</b>
+    {% for g in c.groups %}
+    <div style="margin-top:6px"><b>{{ g.role }}</b>
+      <ul style="margin:2px 0 0 18px;padding:0">
+        {% for e in g.entries %}
+        <li>&ldquo;{{ e.text }}&rdquo; <span style="color:#667">[{{ e.where }}]</span></li>
+        {% endfor %}
+        {% if g.more %}<li style="color:#667">and {{ g.more }} more</li>{% endif %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+  <div style="margin-top:8px"><b>Check before relying on this</b>
+    <ul style="margin:2px 0 0 18px;padding:0">
+      {% for w in c.warnings %}<li>{{ w }}</li>{% else %}<li>None found in the record.</li>{% endfor %}
+    </ul>
+  </div>
+  <div style="margin-top:8px"><b>Sources</b>
+    <ul style="margin:2px 0 0 18px;padding:0">
+      {% for s in c.sources %}<li><a href="{{ s.url }}" style="color:#1f5fbf">{{ s.text }}</a></li>{% else %}<li>No source URL in the record.</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+{% endmacro %}
+{% macro understood_box(u) %}
+<div style="margin:0 0 10px 0;padding:8px 12px;border-left:4px solid #1f5fbf;background:#eaf1fb;color:#16222c;border-radius:6px;font-size:13.5px;line-height:1.5">
+  <div><b>Your question was read as:</b> service <b>{{ u.service or "not stated" }}</b> &middot; place <b>{{ u.place or "not stated" }}</b>{% if u.language %} &middot; language {{ u.language }}{% endif %}</div>
+  <div style="color:#445">&ldquo;<span dir="auto">{{ u.question }}</span>&rdquo; &mdash; if this reading is wrong, use the service and location fields instead.</div>
+</div>
+{% endmacro %}
+{% if message %}
+<div style="font-family:system-ui,sans-serif;max-width:860px">
+  {% if understood %}{{ understood_box(understood) }}{% endif %}
+  <div style="padding:12px 14px;background:#fbe9e7;color:#16222c;border-radius:8px">{{ message }}</div>
+</div>
+{% else %}
+<div style="font-family:system-ui,sans-serif;color:#16222c;background:#f5f7f9;padding:16px;border-radius:12px;max-width:860px">
+  {% if understood %}{{ understood_box(understood) }}{% endif %}
+  {% if result.location and (result.location.guessed or result.location.status == "ambiguous") %}
+  <div style="margin:0 0 8px 0;padding:8px 12px;background:#fbefd8;border-radius:8px;font-size:13.5px"><b>Check the place.</b> {{ place_note }}</div>
+  <div style="font-size:13px;color:#556">{{ result.label }}</div>
+  {% else %}
+  <div style="font-size:13px;color:#556">{{ result.label }} &middot; {{ place_note }}</div>
+  {% endif %}
+  <div style="font-size:19px;font-weight:600;margin-top:4px">{{ result.verdict }}</div>
+  {% if result.sparse_note %}
+  <div style="margin-top:8px;padding:8px 12px;background:#fbefd8;border-radius:8px;font-size:13.5px">{{ result.sparse_note }}</div>
+  {% endif %}
+  {% if definition %}
+  <div style="margin:10px 0;padding:10px 14px;border:1px dashed #8a97a5;border-radius:10px;background:#fff;font-size:13px;line-height:1.5">
+    <b>Search definition written by an AI model for &ldquo;{{ definition.request }}&rdquo;.</b>
+    It has not been clinically reviewed. The matching and the quotes below are done by fixed rules, not by the model.
+    {% for name, terms in definition.rows %}
+    <div><b>{{ name }}:</b> {{ terms | join(", ") or "none" }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% for c in cards %}{{ card(c) }}{% endfor %}
+  {% if alternatives %}
+  <div style="margin-top:14px;font-weight:600">Other options worth knowing</div>
+  {% for c in alternatives %}{{ card(c) }}{% endfor %}
+  {% endif %}
+  <div style="margin-top:14px;font-size:13px;color:#445">
+    <b>How this was decided.</b> {{ result.counts.with_any_evidence }} records mention or imply this service. Within {{ "%.0f" | format(result.max_km) }} km,
+    {{ result.counts.stating_within_radius }} state it and {{ result.counts.corroborated_within_radius }} of those are corroborated
+    ({{ result.counts.without_usable_location }} records were left out because their location could not be established).
+    {% if result.widened %}The usual search distance for this service is {{ "%.0f" | format(result.base_km) }} km; it was widened because nothing closer states the service.{% endif %}
+    Records that only imply the service are shown only when none states it.
+    Each is scored as evidence &times; trust &times; proximity. Evidence is 1.0 when the record states the service and a separate entry backs it up,
+    0.6 when it only states it, 0.25 when it is only implied. Trust starts at 1.0 and loses points for data problems listed on each card.
+    Proximity halves at {{ "%.0f" | format(result.half_km) }} km because this is treated as {{ article }} {{ result.urgency }} service.
+    Distances are straight-line. Travel times are rough ranges, not route calculations: they assume the road is
+    {{ result.travel_assumptions.circuity_min }} to {{ result.travel_assumptions.circuity_max }} times the straight-line distance and an average speed of
+    {{ "%.0f" | format(result.travel_assumptions.speed_slow_kmh) }} to {{ "%.0f" | format(result.travel_assumptions.speed_fast_kmh) }} km/h.
+    {% if result.target_minutes %}The {{ result.target_minutes }}-minute target for this service: {{ result.target_note }}{% endif %}
+    Records are web-extracted claims, not verified facts: call the facility before sending a patient.
+  </div>
+</div>
+{% endif %}

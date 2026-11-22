@@ -1,0 +1,669 @@
+# Care Finder: other names people use for places in India.
+#
+# FIRST DRAFT, written from general knowledge without access to the dataset. It can
+# contain mistakes and it is not complete. The names in Indian scripts have not been
+# checked by native speakers. The notebook prints which groups matched nothing in the
+# data and suggests more pairs found in the data itself.
+#
+# How a place is looked up:
+#   1. The text exactly as typed (after dropping the filler_words below).
+#   2. other_scripts: a name written in another script stands for the English name.
+#   3. places: every name in a group means the same place. The names are tried
+#      in order and the first one found in the data is used.
+#   4. If none of a group's names is in the data, its `within` district is used.
+#   5. The closest spelling among known districts and cities (typing mistakes).
+#   6. For a name in an Indian script that is not listed here: it is read letter by
+#      letter ("गया" -> "gaya") and matched to a place that sounds the same. The answer
+#      then says that this was an automatic reading.
+#
+# Accents and case never matter (Puné = pune). Digits may be in any script (८००००१ = 800001).
+#
+# Group fields:
+#   names    all the spellings, old names and abbreviations for one place
+#   within   the district that contains it (optional, used as a fallback)
+#   state    only look in this state (optional, for names that exist in two states)
+
+# Words that are not part of a place name and are ignored around it.
+filler_words:
+  # English
+  - [near, nearby, in, at, around, from, within, outside, close, to, the, of]
+  - [city, town, district, dist, area, region, taluk, tehsil, village, rural, urban]
+  # Hindi and Urdu typed in Latin letters
+  - [ke, paas, pas, mein, nazdeek, nazdik, zila, jila, shahar, sheher]
+  # Hindi, Marathi
+  - [के, पास, में, निकट, नजदीक, नज़दीक, जिला, ज़िला, शहर, गांव, गाँव, क्षेत्र, जवळ, जिल्हा, मध्ये]
+  # Bengali, Gujarati, Punjabi, Odia
+  - [কাছে, কাছাকাছি, জেলা, শহর]
+  - [નજીક, પાસે, જિલ્લો, શહેર]
+  - [ਨੇੜੇ, ਜ਼ਿਲ੍ਹਾ, ਸ਼ਹਿਰ]
+  - [ନିକଟ, ଜିଲ୍ଲା, ସହର]
+  # Tamil, Telugu, Kannada, Malayalam ("near", "district")
+  - [அருகில், மாவட்டம்]
+  - [దగ్గర, సమీపంలో, జిల్లా]
+  - [ಹತ್ತಿರ, ಜಿಲ್ಲೆ]
+  - [അടുത്ത്, ജില്ല]
+  # Urdu
+  - [قریب, ضلع, شہر, میں, کے, پاس]
+
+# State and territory names. Used for the part after a comma ("Cuttack, Orissa"),
+# and to answer "that is a state, please name a city or district".
+states:
+  - [Andhra Pradesh, AP, A.P., Andhra, आंध्र प्रदेश, ఆంధ్ర ప్రదేశ్, ఆంధ్రప్రదేశ్]
+  - [Arunachal Pradesh, Arunachal, अरुणाचल प्रदेश]
+  - [Assam, असम, আসাম, অসম]
+  - [Bihar, बिहार]
+  - [Chhattisgarh, Chattisgarh, Chhatisgarh, Chattishgarh, CG, छत्तीसगढ़]
+  - [Goa, गोवा]
+  - [Gujarat, Gujrat, गुजरात, ગુજરાત]
+  - [Haryana, Hariyana, हरियाणा]
+  - [Himachal Pradesh, HP, H.P., Himachal, हिमाचल प्रदेश]
+  - [Jharkhand, Jharkand, झारखंड]
+  - [Karnataka, Karnatak, कर्नाटक, ಕರ್ನಾಟಕ]
+  - [Kerala, Keralam, केरल, കേരളം, കേരള]
+  - [Madhya Pradesh, MP, M.P., मध्य प्रदेश]
+  - [Maharashtra, Maharastra, महाराष्ट्र]
+  - [Manipur, मणिपुर]
+  - [Meghalaya, मेघालय]
+  - [Mizoram, मिजोरम]
+  - [Nagaland, नागालैंड]
+  - [Odisha, Orissa, ओडिशा, उड़ीसा, ଓଡ଼ିଶା]
+  - [Punjab, पंजाब, ਪੰਜਾਬ]
+  - [Rajasthan, Rajastan, राजस्थान]
+  - [Sikkim, सिक्किम]
+  - [Tamil Nadu, Tamilnadu, TN, तमिलनाडु, தமிழ்நாடு, தமிழ் நாடு]
+  - [Telangana, Telengana, TS, तेलंगाना, తెలంగాణ]
+  - [Tripura, त्रिपुरा, ত্রিপুরা]
+  - [Uttar Pradesh, UP, U.P., उत्तर प्रदेश, यूपी]
+  - [Uttarakhand, Uttaranchal, Uttrakhand, उत्तराखंड]
+  - [West Bengal, WB, W.B., Bengal, Paschim Banga, पश्चिम बंगाल, পশ্চিমবঙ্গ]
+  - [Andaman and Nicobar Islands, Andaman & Nicobar Islands, Andaman and Nicobar, Andaman & Nicobar, Andaman Nicobar, A&N Islands]
+  - [Dadra and Nagar Haveli and Daman and Diu, Dadra and Nagar Haveli, Dadra & Nagar Haveli, Daman and Diu, Daman & Diu, Dadra and Nagar Haveli & Daman and Diu, Dadra & Nagar Haveli and Daman & Diu]
+  - [Delhi, NCT of Delhi, National Capital Territory of Delhi, दिल्ली]
+  - [Ladakh, लद्दाख]
+  - [Jammu and Kashmir, Jammu & Kashmir, J&K, Jammu Kashmir, जम्मू और कश्मीर, जम्मू कश्मीर, جموں و کشمیر]
+  - [Lakshadweep, Laccadive Islands]
+  - [Puducherry, Pondicherry, पुडुचेरी, புதுச்சேரி]
+
+places:
+  # ---- Delhi, Chandigarh ----
+  - names: [Delhi, New Delhi, NCT of Delhi, Dilli, Delhi NCR, NCR, National Capital Territory of Delhi]
+    within: Central Delhi
+  - names: [Chandigarh, Chd]
+
+  # ---- Karnataka ----
+  - names: [Bengaluru, Bangalore, Bengalooru, Bengaluru City, Bangalore City, Blr]
+    within: Bengaluru Urban
+  - names: [Bengaluru Urban, Bangalore Urban]
+  - names: [Bengaluru Rural, Bangalore Rural]
+  - names: [Mysuru, Mysore]
+  - names: [Mangaluru, Mangalore]
+    within: Dakshina Kannada
+  - names: [Dakshina Kannada, Dakshin Kannad, South Canara, South Kanara]
+  - names: [Uttara Kannada, Uttar Kannad, North Canara, North Kanara]
+  - names: [Karwar]
+    within: Uttara Kannada
+  - names: [Belagavi, Belgaum, Belgavi]
+  - names: [Kalaburagi, Gulbarga, Kalburgi]
+  - names: [Vijayapura, Bijapur]
+    state: Karnataka
+  - names: [Ballari, Bellary]
+  - names: [Shivamogga, Shimoga]
+  - names: [Tumakuru, Tumkur]
+  - names: [Hubballi, Hubli, Hubli-Dharwad, Hubballi-Dharwad]
+    within: Dharwad
+  - names: [Dharwad, Dharwar]
+  - names: [Chikkamagaluru, Chikmagalur, Chickmagalur]
+  - names: [Chamarajanagar, Chamrajnagar, Chamarajanagara]
+  - names: [Davanagere, Davangere]
+  - names: [Bagalkot, Bagalkote]
+  - names: [Kodagu, Coorg]
+  - names: [Madikeri, Mercara]
+    within: Kodagu
+  - names: [Hosapete, Hospet]
+    within: Ballari
+  - names: [Udupi, Udipi]
+  - names: [Chikkaballapura, Chikballapur, Chikkaballapur]
+  - names: [Yadgir, Yadagiri]
+  - names: [Ramanagara, Ramanagaram]
+
+  # ---- Tamil Nadu, Puducherry ----
+  - names: [Chennai, Madras]
+  - names: [Coimbatore, Kovai, Koyambuthur]
+  - names: [Tiruchirappalli, Trichy, Tiruchi, Tiruchy, Trichinopoly, Thiruchirappalli, Tiruchirapalli]
+  - names: [Tirunelveli, Nellai, Tinnevelly, Thirunelveli]
+  - names: [Thoothukudi, Tuticorin, Thoothukkudi]
+  - names: [Kanniyakumari, Kanyakumari, Cape Comorin]
+  - names: [Nagercoil]
+    within: Kanniyakumari
+  - names: [Thanjavur, Tanjore, Tanjavur]
+  - names: [The Nilgiris, Nilgiris, Nilgiri]
+  - names: [Udhagamandalam, Ooty, Ootacamund, Udagamandalam]
+    within: The Nilgiris
+  - names: [Kancheepuram, Kanchipuram, Kanchi]
+  - names: [Tiruvallur, Thiruvallur]
+  - names: [Viluppuram, Villupuram]
+  - names: [Tiruvannamalai, Thiruvannamalai]
+  - names: [Sivaganga, Sivagangai]
+  - names: [Thiruvarur, Tiruvarur]
+  - names: [Tiruppur, Tirupur]
+  - names: [Virudhunagar, Virudunagar]
+  - names: [Ramanathapuram, Ramnad]
+  - names: [Pudukkottai, Pudukottai]
+  - names: [Nagapattinam, Nagappattinam]
+  - names: [Chengalpattu, Chengalpet, Chingleput]
+  - names: [Puducherry, Pondicherry, Pondy]
+
+  # ---- Kerala ----
+  - names: [Thiruvananthapuram, Trivandrum, Tvm, Thiruvanathapuram, Tiruvanantapuram]
+  - names: [Kochi, Cochin, Kochin]
+    within: Ernakulam
+  - names: [Ernakulam, Eranakulam]
+  - names: [Kozhikode, Calicut]
+  - names: [Thrissur, Trichur, Trissur]
+  - names: [Kollam, Quilon]
+  - names: [Alappuzha, Alleppey, Alapuzha]
+  - names: [Palakkad, Palghat]
+  - names: [Kannur, Cannanore]
+  - names: [Kasaragod, Kasargod, Kasaragode]
+  - names: [Wayanad, Wynad, Waynad]
+  - names: [Pathanamthitta, Pathanamthita]
+  - names: [Malappuram, Malapuram]
+
+  # ---- Andhra Pradesh, Telangana ----
+  - names: [Hyderabad, Hyd, Hyderabad City]
+  - names: [Secunderabad, Secundrabad]
+    within: Hyderabad
+  - names: [Rangareddy, Ranga Reddy, Rangareddi, K.V. Rangareddy, KV Rangareddy]
+  - names: [Visakhapatnam, Vizag, Vishakhapatnam, Visakhapatanam, Waltair]
+  - names: [Vijayawada, Bezawada]
+    within: Krishna
+  - names: [YSR Kadapa, Kadapa, Cuddapah, Y.S.R., YSR, Y.S.R. Kadapa, YSR District]
+  - names: [Anantapur, Ananthapuramu, Anantapuramu, Ananthapur]
+  - names: [Sri Potti Sriramulu Nellore, Nellore, SPSR Nellore, S.P.S. Nellore, SPS Nellore]
+  - names: [Rajamahendravaram, Rajahmundry]
+    within: East Godavari
+  - names: [Tirupati, Tirupathi]
+    within: Chittoor
+  - names: [Ongole]
+    within: Prakasam
+  - names: [Guntur, Guntoor]
+  - names: [Kurnool, Karnul]
+  - names: [Srikakulam, Sikakulam]
+  - names: [Vizianagaram, Vijayanagaram]
+  - names: [Warangal, Warangal Urban, Hanamkonda, Hanumakonda]
+  - names: [Mahabubnagar, Mahbubnagar, Mahaboobnagar]
+  - names: [Medchal Malkajgiri, Medchal-Malkajgiri, Medchal]
+  - names: [Sangareddy, Sanga Reddy]
+    within: Medak
+  - names: [Nalgonda, Nalagonda]
+
+  # ---- Maharashtra, Goa ----
+  - names: [Mumbai, Bombay, Mumbai City, Greater Mumbai, Brihanmumbai, Brihan Mumbai]
+  - names: [Mumbai Suburban, Bombay Suburban, Mumbai Suburbs]
+    within: Mumbai
+  - names: [Thane, Thana]
+  - names: [Navi Mumbai, New Bombay]
+    within: Thane
+  - names: [Pune, Poona]
+  - names: [Nashik, Nasik]
+  - names: [Chhatrapati Sambhajinagar, Sambhajinagar, Sambhaji Nagar, Aurangabad]
+    state: Maharashtra
+  - names: [Dharashiv, Osmanabad]
+  - names: [Ahilyanagar, Ahmednagar, Ahmadnagar, Ahilya Nagar]
+  - names: [Beed, Bid]
+  - names: [Buldhana, Buldana]
+  - names: [Gondia, Gondiya]
+  - names: [Raigad, Raigarh]
+    state: Maharashtra
+  - names: [Alibag, Alibaug]
+    within: Raigad
+    state: Maharashtra
+  - names: [Solapur, Sholapur]
+  - names: [Sindhudurg, Sindhudurga]
+  - names: [Amravati, Amraoti]
+    state: Maharashtra
+  - names: [Dhule, Dhulia]
+  - names: [Yavatmal, Yeotmal]
+  - names: [Gadchiroli, Gadhchiroli]
+  - names: [Panaji, Panjim]
+    within: North Goa
+  - names: [Margao, Madgaon]
+    within: South Goa
+  - names: [Vasco da Gama, Vasco, Mormugao]
+    within: South Goa
+
+  # ---- Gujarat ----
+  - names: [Ahmedabad, Ahmadabad, Amdavad, Ahemdabad, Ahmedabad City]
+  - names: [Vadodara, Baroda]
+  - names: [Kachchh, Kutch, Kachh, Cutch]
+  - names: [Bhuj]
+    within: Kachchh
+  - names: [Mehsana, Mahesana]
+  - names: [Banaskantha, Banas Kantha]
+  - names: [Palanpur]
+    within: Banaskantha
+  - names: [Sabarkantha, Sabar Kantha]
+  - names: [Himatnagar, Himmatnagar]
+    within: Sabarkantha
+  - names: [Panchmahal, Panch Mahals, Panchmahals]
+  - names: [Godhra]
+    within: Panchmahal
+  - names: [Dahod, Dohad]
+  - names: [Dang, The Dangs, Dangs]
+  - names: [Bharuch, Broach]
+  - names: [Kheda, Kaira]
+  - names: [Nadiad]
+    within: Kheda
+  - names: [Gandhinagar, Gandhi Nagar]
+  - names: [Junagadh, Junagarh]
+  - names: [Surendranagar, Surendra Nagar]
+  - names: [Valsad, Bulsar]
+  - names: [Morbi, Morvi]
+  - names: [Devbhumi Dwarka, Devbhoomi Dwarka, Dwarka]
+  - names: [Chhota Udaipur, Chhotaudepur, Chhota Udepur]
+  - names: [Arvalli, Aravalli]
+
+  # ---- Rajasthan ----
+  - names: [Sri Ganganagar, Ganganagar, Sriganganagar]
+  - names: [Chittorgarh, Chittaurgarh, Chittor]
+  - names: [Dholpur, Dhaulpur]
+  - names: [Jhunjhunu, Jhunjhunun]
+  - names: [Jalore, Jalor]
+  - names: [Sawai Madhopur, Sawaimadhopur]
+  - names: [Mount Abu]
+    within: Sirohi
+
+  # ---- Punjab, Haryana, Himachal Pradesh ----
+  - names: [Sahibzada Ajit Singh Nagar, SAS Nagar, S.A.S. Nagar, Mohali, Ajitgarh]
+  - names: [Shaheed Bhagat Singh Nagar, Shahid Bhagat Singh Nagar, SBS Nagar, Nawanshahr, Nawan Shahr, Nawanshahar]
+  - names: [Rupnagar, Ropar, Roopnagar]
+  - names: [Sri Muktsar Sahib, Muktsar]
+  - names: [Bathinda, Bhatinda]
+  - names: [Firozpur, Ferozepur, Firozepur, Ferozpur]
+  - names: [Jalandhar, Jullundur]
+  - names: [Tarn Taran, Taran Taran, Tarntaran]
+  - names: [Gurugram, Gurgaon, Gurgoan]
+  - names: [Nuh, Mewat]
+  - names: [Sonipat, Sonepat]
+  - names: [Hisar, Hissar]
+  - names: [Mahendragarh, Mahendergarh]
+  - names: [Narnaul]
+    within: Mahendragarh
+  - names: [Yamunanagar, Yamuna Nagar]
+  - names: [Shimla, Simla]
+  - names: [Kullu, Kulu]
+  - names: [Dharamshala, Dharamsala]
+    within: Kangra
+  - names: [Lahaul and Spiti, Lahul and Spiti, Lahaul & Spiti, Lahul & Spiti, Lahaul Spiti]
+
+  # ---- Jammu and Kashmir, Ladakh, Uttarakhand ----
+  - names: [Leh, Leh Ladakh, Ladakh]
+  - names: [Baramulla, Baramula]
+  - names: [Budgam, Badgam]
+  - names: [Bandipora, Bandipore]
+  - names: [Shopian, Shupiyan]
+  - names: [Poonch, Punch]
+  - names: [Rajouri, Rajauri]
+  - names: [Dehradun, Dehra Dun, Doon]
+  - names: [Haridwar, Hardwar]
+  - names: [Nainital, Naini Tal]
+  - names: [Haldwani]
+    within: Nainital
+  - names: [Pauri Garhwal, Garhwal, Pauri]
+  - names: [Tehri Garhwal, Tehri]
+  - names: [Udham Singh Nagar, Udhamsingh Nagar, US Nagar, U.S. Nagar]
+  - names: [Rudrapur]
+    within: Udham Singh Nagar
+  - names: [Uttarkashi, Uttar Kashi]
+  - names: [Rudraprayag, Rudra Prayag]
+
+  # ---- Uttar Pradesh ----
+  - names: [Prayagraj, Allahabad, Prayag]
+  - names: [Ayodhya, Faizabad]
+  - names: [Varanasi, Banaras, Benares, Benaras, Kashi]
+  - names: [Kanpur, Kanpur Nagar, Cawnpore, Kanpur City]
+  - names: [Kanpur Dehat, Ramabai Nagar]
+  - names: [Lucknow, Lko]
+  - names: [Gautam Buddha Nagar, Gautam Budh Nagar, Gautam Buddh Nagar, GB Nagar, G.B. Nagar]
+  - names: [Noida, Greater Noida]
+    within: Gautam Buddha Nagar
+  - names: [Lakhimpur Kheri, Kheri, Lakhimpur]
+    state: Uttar Pradesh
+  - names: [Bhadohi, Sant Ravidas Nagar, Sant Ravi Das Nagar]
+  - names: [Amroha, Jyotiba Phule Nagar, J.P. Nagar, JP Nagar]
+  - names: [Kasganj, Kanshiram Nagar, Kanshi Ram Nagar]
+  - names: [Hathras, Mahamaya Nagar]
+  - names: [Hapur, Panchsheel Nagar]
+  - names: [Sambhal, Bhim Nagar]
+  - names: [Shamli, Prabuddh Nagar]
+  - names: [Amethi, Chhatrapati Shahuji Maharaj Nagar, CSM Nagar]
+  - names: [Mughalsarai, Pt Deen Dayal Upadhyaya Nagar, Deen Dayal Upadhyaya Nagar]
+    within: Chandauli
+  - names: [Budaun, Badaun, Badayun]
+  - names: [Bulandshahr, Bulandshahar]
+  - names: [Barabanki, Bara Banki]
+  - names: [Raebareli, Rae Bareli, Raibareli]
+  - names: [Shrawasti, Shravasti]
+  - names: [Siddharthnagar, Siddharth Nagar]
+  - names: [Kushinagar, Kushi Nagar]
+  - names: [Padrauna]
+    within: Kushinagar
+  - names: [Maharajganj, Mahrajganj]
+  - names: [Sant Kabir Nagar, Sant Kabeer Nagar]
+  - names: [Ambedkar Nagar, Ambedkarnagar]
+  - names: [Muzaffarnagar, Muzaffar Nagar]
+  - names: [Baghpat, Bagpat]
+  - names: [Bareilly, Bareli]
+  - names: [Meerut, Merath]
+  - names: [Ghaziabad, Gaziabad]
+  - names: [Moradabad, Muradabad]
+  - names: [Firozabad, Ferozabad]
+  - names: [Sonbhadra, Sonebhadra]
+  - names: [Chitrakoot, Chitrakut]
+  - names: [Bijnor, Bijnaur]
+
+  # ---- Bihar, Jharkhand ----
+  - names: [Purnia, Purnea]
+  - names: [Munger, Monghyr]
+  - names: [Kaimur, Kaimur (Bhabua), Kaimur Bhabua]
+  - names: [Bhabua]
+    within: Kaimur
+  - names: [Arrah, Ara]
+    within: Bhojpur
+  - names: [Sasaram]
+    within: Rohtas
+  - names: [Chhapra, Chapra]
+    within: Saran
+  - names: [Hajipur]
+    within: Vaishali
+  - names: [East Champaran, Purbi Champaran, Purba Champaran]
+  - names: [Motihari]
+    within: East Champaran
+  - names: [West Champaran, Pashchim Champaran, Paschim Champaran]
+  - names: [Bettiah]
+    within: West Champaran
+  - names: [Bihar Sharif, Biharsharif]
+    within: Nalanda
+  - names: [Jehanabad, Jahanabad]
+  - names: [Buxar, Baksar]
+  - names: [East Singhbhum, Purbi Singhbhum, Purba Singhbhum, East Singhbum]
+  - names: [Jamshedpur, Tatanagar, Tata Nagar]
+    within: East Singhbhum
+  - names: [West Singhbhum, Pashchimi Singhbhum, Paschim Singhbhum]
+  - names: [Chaibasa]
+    within: West Singhbhum
+  - names: [Seraikela Kharsawan, Saraikela Kharsawan, Seraikela-Kharsawan, Saraikela]
+  - names: [Hazaribagh, Hazaribag]
+  - names: [Koderma, Kodarma]
+  - names: [Palamu, Palamau]
+  - names: [Medininagar, Daltonganj]
+    within: Palamu
+  - names: [Pakur, Pakaur]
+  - names: [Sahibganj, Sahebganj]
+  - names: [Bokaro, Bokaro Steel City]
+  - names: [Deoghar, Devghar]
+
+  # ---- West Bengal ----
+  - names: [Kolkata, Calcutta, Kolkatta]
+  - names: [Howrah, Haora]
+  - names: [Hooghly, Hugli, Hoogly]
+  - names: [Purba Bardhaman, Bardhaman, Burdwan, Barddhaman, East Burdwan, Purba Burdwan]
+  - names: [Paschim Bardhaman, West Burdwan, Paschim Burdwan]
+  - names: [Asansol]
+    within: Paschim Bardhaman
+  - names: [Durgapur]
+    within: Paschim Bardhaman
+  - names: [Paschim Medinipur, Pashchim Medinipur, West Medinipur, West Midnapore, Medinipur, Midnapore]
+  - names: [Purba Medinipur, East Medinipur, East Midnapore]
+  - names: [North 24 Parganas, North Twenty Four Parganas, Uttar 24 Parganas, 24 Parganas North, North 24 Pgs]
+  - names: [South 24 Parganas, South Twenty Four Parganas, Dakshin 24 Parganas, 24 Parganas South, South 24 Pgs]
+  - names: [Darjeeling, Darjiling]
+  - names: [Siliguri, Shiliguri]
+    within: Darjeeling
+  - names: [Cooch Behar, Koch Bihar, Coochbehar, Kochbihar]
+  - names: [Malda, Maldah]
+  - names: [Uttar Dinajpur, North Dinajpur]
+  - names: [Dakshin Dinajpur, South Dinajpur]
+  - names: [Purulia, Puruliya]
+  - names: [Berhampore, Baharampur]
+    within: Murshidabad
+  - names: [Krishnanagar]
+    within: Nadia
+
+  # ---- Odisha ----
+  - names: [Khordha, Khurda]
+  - names: [Bhubaneswar, Bhubaneshwar, Bhubneshwar, BBSR]
+    within: Khordha
+  - names: [Balasore, Baleshwar, Baleswar]
+  - names: [Kendujhar, Keonjhar]
+  - names: [Mayurbhanj, Mayurbhanja]
+  - names: [Baripada]
+    within: Mayurbhanj
+  - names: [Sundargarh, Sundergarh]
+  - names: [Rourkela, Raurkela]
+    within: Sundargarh
+  - names: [Angul, Anugul]
+  - names: [Jajpur, Jajapur]
+  - names: [Jagatsinghpur, Jagatsinghapur]
+  - names: [Nabarangpur, Nabarangapur, Nowrangpur]
+  - names: [Subarnapur, Sonepur, Sonapur]
+  - names: [Boudh, Baudh, Bauda]
+  - names: [Balangir, Bolangir]
+  - names: [Debagarh, Deogarh]
+    state: Odisha
+  - names: [Cuttack, Kataka]
+  - names: [Berhampur, Brahmapur]
+    within: Ganjam
+  - names: [Kandhamal, Phulbani, Phulabani]
+  - names: [Kendrapara, Kendrapada]
+  - names: [Bargarh, Baragarh]
+
+  # ---- Chhattisgarh, Madhya Pradesh ----
+  - names: [Kabirdham, Kabeerdham, Kawardha]
+  - names: [Dakshin Bastar Dantewada, Dantewada, Dantewara]
+  - names: [Uttar Bastar Kanker, Kanker]
+  - names: [Koriya, Korea, Koria]
+  - names: [Janjgir-Champa, Janjgir Champa, Janjgir]
+  - names: [Bhilai, Bhilai Nagar]
+    within: Durg
+  - names: [Rajnandgaon, Raj Nandgaon]
+  - names: [Jagdalpur]
+    within: Bastar
+  - names: [Surguja, Sarguja]
+  - names: [Ambikapur]
+    within: Surguja
+  - names: [Baloda Bazar, Balodabazar]
+  - names: [Gariaband, Gariyaband]
+  - names: [Narmadapuram, Hoshangabad]
+  - names: [Narsinghpur, Narsimhapur]
+  - names: [Khandwa, East Nimar, Purba Nimar]
+  - names: [Khargone, West Nimar, Paschim Nimar, Khargon]
+  - names: [Sagar, Saugor]
+  - names: [Jabalpur, Jubbulpore]
+  - names: [Chhindwara, Chindwara]
+  - names: [Mandsaur, Mandsour]
+  - names: [Neemuch, Nimach]
+  - names: [Morena, Murena]
+  - names: [Ashoknagar, Ashok Nagar]
+  - names: [Barwani, Badwani]
+
+  # ---- North-east, islands ----
+  - names: [Guwahati, Gauhati, Gowahati]
+    within: Kamrup Metropolitan
+  - names: [Kamrup Metropolitan, Kamrup Metro, Kamrup (Metro), Kamrup Metropolitian]
+  - names: [Nagaon, Nowgong]
+  - names: [Sivasagar, Sibsagar]
+  - names: [Mangaldoi, Mangaldai]
+    within: Darrang
+  - names: [Diphu]
+    within: Karbi Anglong
+  - names: [Dima Hasao, North Cachar Hills, N.C. Hills]
+  - names: [Silchar]
+    within: Cachar
+  - names: [Tezpur]
+    within: Sonitpur
+  - names: [Morigaon, Marigaon]
+  - names: [Shillong]
+    within: East Khasi Hills
+  - names: [Ri Bhoi, Ribhoi, Ri-Bhoi]
+  - names: [Tura]
+    within: West Garo Hills
+  - names: [Aizawl, Aizwal]
+  - names: [Imphal]
+    within: Imphal West
+  - names: [Itanagar]
+    within: Papum Pare
+  - names: [Agartala]
+    within: West Tripura
+  - names: [Gangtok, East Sikkim, Gangtok District]
+  - names: [Port Blair, Sri Vijaya Puram]
+    within: South Andaman
+
+# Place names in other scripts. Key: the English name (it is then looked up like any typed
+# name, so it may itself be an old name or an alias). Values: how the place is written in
+# Hindi, in the language of its region, and in Urdu where that is common.
+# Names that are missing here still work when their letters read like the English name
+# (see step 6 at the top); this list is for the ones that do not, and for the big cities.
+other_scripts:
+  # ---- the largest cities ----
+  Delhi: [दिल्ली, नई दिल्ली, देहली, دہلی, دلی, ਦਿੱਲੀ, দিল্লি]
+  Mumbai: [मुंबई, मुम्बई, बंबई, बम्बई, મુંબઈ, ممبئی]
+  Kolkata: [कोलकाता, कलकत्ता, কলকাতা, কোলকাতা]
+  Chennai: [चेन्नई, मद्रास, சென்னை, மெட்ராஸ்]
+  Bengaluru: [बेंगलुरु, बेंगलूरु, बैंगलोर, बंगलौर, ಬೆಂಗಳೂರು]
+  Hyderabad: [हैदराबाद, హైదరాబాద్, حیدرآباد]
+  Ahmedabad: [अहमदाबाद, અમદાવાદ]
+  Pune: [पुणे, पूना]
+  # ---- north ----
+  Chandigarh: [चंडीगढ़, ਚੰਡੀਗੜ੍ਹ]
+  Ludhiana: [लुधियाना, ਲੁਧਿਆਣਾ]
+  Amritsar: [अमृतसर, ਅੰਮ੍ਰਿਤਸਰ]
+  Jalandhar: [जालंधर, ਜਲੰਧਰ]
+  Patiala: [पटियाला, ਪਟਿਆਲਾ]
+  Bathinda: [बठिंडा, ਬਠਿੰਡਾ]
+  Gurugram: [गुरुग्राम, गुड़गांव, गुड़गाँव]
+  Faridabad: [फरीदाबाद, फ़रीदाबाद]
+  Shimla: [शिमला]
+  Jammu: [जम्मू]
+  Srinagar: [श्रीनगर, سرینگر, سری نگر]
+  Dehradun: [देहरादून]
+  Haridwar: [हरिद्वार]
+  Jaipur: [जयपुर]
+  Jodhpur: [जोधपुर]
+  Udaipur: [उदयपुर]
+  Kota: [कोटा]
+  Bikaner: [बीकानेर]
+  Ajmer: [अजमेर]
+  # ---- Uttar Pradesh ----
+  Lucknow: [लखनऊ, لکھنؤ]
+  Kanpur: [कानपुर]
+  Agra: [आगरा]
+  Varanasi: [वाराणसी, बनारस, काशी]
+  Prayagraj: [प्रयागराज, इलाहाबाद]
+  Meerut: [मेरठ]
+  Ghaziabad: [गाजियाबाद, गाज़ियाबाद]
+  Noida: [नोएडा]
+  Bareilly: [बरेली]
+  Moradabad: [मुरादाबाद]
+  Aligarh: [अलीगढ़]
+  Gorakhpur: [गोरखपुर]
+  Jhansi: [झांसी, झाँसी]
+  Mathura: [मथुरा]
+  Ayodhya: [अयोध्या]
+  # ---- Bihar, Jharkhand ----
+  Patna: [पटना, পাটনা]
+  Gaya: [गया]
+  Muzaffarpur: [मुजफ्फरपुर, मुज़फ़्फ़रपुर]
+  Bhagalpur: [भागलपुर]
+  Darbhanga: [दरभंगा]
+  Purnia: [पूर्णिया]
+  Ranchi: [रांची, राँची]
+  Jamshedpur: [जमशेदपुर]
+  Dhanbad: [धनबाद]
+  # ---- centre ----
+  Bhopal: [भोपाल]
+  Indore: [इंदौर, इन्दौर]
+  Jabalpur: [जबलपुर]
+  Gwalior: [ग्वालियर]
+  Ujjain: [उज्जैन]
+  Raipur: [रायपुर]
+  Bilaspur: [बिलासपुर]
+  Bhilai: [भिलाई]
+  # ---- west ----
+  Nagpur: [नागपुर, नागपूर]
+  Nashik: [नाशिक, नासिक]
+  Thane: [ठाणे]
+  Aurangabad: [औरंगाबाद]
+  Solapur: [सोलापुर, सोलापूर]
+  Kolhapur: [कोल्हापुर, कोल्हापूर]
+  Amravati: [अमरावती]
+  Nanded: [नांदेड]
+  Panaji: [पणजी]
+  Surat: [सूरत, સુરત]
+  Vadodara: [वडोदरा, बड़ौदा, વડોદરા]
+  Rajkot: [राजकोट, રાજકોટ]
+  Gandhinagar: [गांधीनगर, ગાંધીનગર]
+  Bhavnagar: [भावनगर, ભાવનગર]
+  Jamnagar: [जामनगर, જામનગર]
+  # ---- east and north-east ----
+  Howrah: [हावड़ा, হাওড়া]
+  Siliguri: [सिलीगुड़ी, শিলিগুড়ি]
+  Asansol: [आसनसोल, আসানসোল]
+  Durgapur: [दुर्गापुर, দুর্গাপুর]
+  Darjeeling: [दार्जिलिंग, দার্জিলিং]
+  Bhubaneswar: [भुवनेश्वर, ଭୁବନେଶ୍ୱର]
+  Cuttack: [कटक, କଟକ]
+  Puri: [पुरी, ପୁରୀ]
+  Sambalpur: [संबलपुर, ସମ୍ବଲପୁର]
+  Rourkela: [राउरकेला, ରାଉରକେଲା]
+  Guwahati: [गुवाहाटी, গুৱাহাটী, গুয়াহাটি]
+  Shillong: [शिलांग]
+  Imphal: [इंफाल, इम्फाल]
+  Aizawl: [आइजोल]
+  Agartala: [अगरतला, আগরতলা]
+  Gangtok: [गंगटोक]
+  Itanagar: [ईटानगर]
+  Kohima: [कोहिमा]
+  # ---- south ----
+  Mysuru: [मैसूर, मैसूरु, ಮೈಸೂರು]
+  Mangaluru: [मंगलुरु, मैंगलोर, ಮಂಗಳೂರು]
+  Hubballi: [हुबली, ಹುಬ್ಬಳ್ಳಿ]
+  Belagavi: [बेलगाम, बेलगावी, ಬೆಳಗಾವಿ]
+  Coimbatore: [कोयंबटूर, கோயம்புத்தூர், கோவை]
+  Madurai: [मदुरै, மதுரை]
+  Tiruchirappalli: [तिरुचिरापल्ली, திருச்சிராப்பள்ளி, திருச்சி]
+  Salem: [सेलम, சேலம்]
+  Tirunelveli: [திருநெல்வேலி]
+  Thanjavur: [தஞ்சாவூர்]
+  Kancheepuram: [காஞ்சிபுரம்]
+  Vellore: [வேலூர்]
+  Puducherry: [पुडुचेरी, पांडिचेरी, புதுச்சேரி]
+  Thiruvananthapuram: [तिरुवनंतपुरम, തിരുവനന്തപുരം]
+  Kochi: [कोच्चि, കൊച്ചി]
+  Ernakulam: [എറണാകുളം]
+  Kozhikode: [कोझिकोड, കോഴിക്കോട്]
+  Thrissur: [त्रिशूर, തൃശ്ശൂർ, തൃശൂർ]
+  Kollam: [കൊല്ലം]
+  Kannur: [കണ്ണൂർ]
+  Visakhapatnam: [विशाखापत्तनम, विशाखापट्टनम, విశాఖపట్నం, వైజాగ్]
+  Vijayawada: [विजयवाड़ा, విజయవాడ]
+  Guntur: [गुंटूर, గుంటూరు]
+  Tirupati: [तिरुपति, తిరుపతి]
+  Warangal: [वारंगल, వరంగల్]
+  # ---- names whose letters do not read like the English spelling, or that sound like another place ----
+  Buxar: [बक्सर]
+  Araria: [अररिया]
+  Sheohar: [शिवहर]
+  Arwal: [अरवल]
+  Jamui: [जमुई]
+  Bhojpur: [भोजपुर]
+  Jalgaon: [जळगाव, जलगांव]
+  Hoshiarpur: [होशियारपुर, ਹੁਸ਼ਿਆਰਪੁਰ]
+  Patan: [पाटन, પાટણ]
+  Erode: [ஈரோடு]
+  Dindigul: [திண்டுக்கல்]
+  Cuddalore: [கடலூர்]
+  Karimnagar: [కరీంనగర్]
+  Kurnool: [కర్నూలు]
+  Chittoor: [చిత్తూరు]
+  Hassan: [ಹಾಸನ]

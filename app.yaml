@@ -1,0 +1,8 @@
+# Databricks App settings for Care Finder.
+command: ['python', 'app.py']
+
+env:
+  # The model that reads free-text questions. The app works without it (service + place fields).
+  # To let the app call it: add this serving endpoint as an app resource with "Can query".
+  - name: 'CARE_FINDER_MODEL'
+    value: 'databricks-meta-llama-3-3-70b-instruct'
